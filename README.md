@@ -1,2 +1,2 @@
-# works_tool
-# this repo is for creating work related tools
+# Works_Tool
+this repo is for creating work related tools
