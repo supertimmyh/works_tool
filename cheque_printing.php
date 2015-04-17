@@ -1,14 +1,16 @@
 <?php
     //include class
     include("Numbers/Words.php");
-	
-    phpinfo();
+		
+    //phpinfo();
 	
 	$date_fmt = "M jS, Y";
-	$chq_print_dt = date($date_fmt);    // Set the cheque printing date
+	$chq_print_dt = "Date:      ".date($date_fmt);    // Set the cheque printing date
+	
+	$bounce_pecent = "1%";                            // Bounce percent as 1%
 
 	//Create begging and end quarter date
-	$n = date('n');
+	$n = (date('n') - 1);
 	$curr_year = date('Y');
     if($n < 4){
     	$begQtrDt = $curr_year.'-01-01';
@@ -28,13 +30,43 @@
 	$begQtr = date($date_fmt,strtotime($begQtrDt));
 	$endQtr = date($date_fmt,strtotime($endQtrDt));
 	
-	//  Create the date difference for the current quarter
-	$dStart = new DateTime($begQtrDt);
-	$dEnd  = new DateTime($endQtrDt);
-	$dDiff = $dStart->diff($dEnd);
-	$days = $dDiff->format('%a');
-
+	$days = daysDiff($begQtrDt, $endQtrDt);
 	
+	//  Create the date difference function for the current quarter
+	function daysDiff ($begDt, $endDt) {
+		$dStart = new DateTime($begDt);
+		$dEnd  = new DateTime($endDt);
+		$dDiff = $dStart->diff($dEnd);
+		$numbsDays = $dDiff->format('%a');
+		return $numbsDays;	
+	}
+	
+	//   Create a functon for comments
+	function cmtCreate ($arrValue) {
+			global $intQtr, $bounce_pecent, $days, $endQtrDt;
+			$_commenceDt = $arrValue[2];              //   Dividend commenct date             
+			$_units = $arrValue[6];                   //   Total units per unit holder
+			$_divAmt = $arrValue[7];                  //   Dividend amount
+			$_bonus = $arrValue[5];                   //   Bonus indicator
+			$_bonusAmt = $arrValue[8];                //   Bonus amount 
+	
+			//   Create divident period and amount detail function
+			if (empty($_commenceDt)) {             //   Full quarter dividends
+				$_divComment = "$".$intQtr."/u*".$_units."u=$".$_divAmt;
+				} else {                          //   Partial period dividends
+					$_divPeriod = daysDiff($_commenceDt, $endQtrDt);
+					$_divComment = "$".$intQtr."/u*".$_units."u divided by " .$days."days *".$_divPeriod." days=$".$_divAmt;
+				}
+			
+			//   Create bonus detail
+			if (!empty($_bonus)) {
+				$_bonusComment = $bounce_pecent."$".$_bonusAmt;
+				$rsltArr = array($_divComment, $_bonusComment);
+			} else {$rsltArr = array($_divComment);}
+			
+			return $rsltArr;
+	}
+
 	$formattedArr = array();
 	$filename = "DX-Investment Changes.csv";
 	//  CSV to multidimensional array in php
@@ -44,42 +76,68 @@
        		$count = count($data);  //  Get the total keys in row
         	//  Insert data to our array
         	for ($i=0; $i < $count; $i++) {
-            	$formattedArr[$key+1][$i] = $data[$i];
+            	$formattedArr[$key][$i] = $data[$i];     //  Without count the head row
         	}
         	$key++;
     	}
+    	$headArr = array_shift($formattedArr);
     	fclose($handle);    //  Close file handle
 	}
+		
+	//  Check if the second row has now divident receiver's name, if not, term the progam and issue an error
+	if (empty($formattedArr[0][0])) {
+			exit("The first row of data file has blanked receiver's name. Please review the file");
+		}
 	
+	$intQtr = $formattedArr[0][4] * $days;           //  Quarterly Interest
+		
 	$count = 0;
 	foreach ($formattedArr as $value) {
-		if ($formattedArr[$count][0] == 'Name') {
-			continue;
-		}
-		else {
-			//  Single row for one unit holder
-			if (!empty($formattedArr[$count][0]) and !empty($formattedArr[$count+1][0])) {
-				$amtNumbs = $formattedArr[$count][9];           //  Total distributied amount
-				$amtWords = toWords($amtNumbs);                 //  Total distributied amount in words
-				$recipient = $formattedArr[$count][0];          //  The dividens receiver's name
-				
-				if (empty($formattedArr[$count][2])) {
-					$distbBegDt = $begQtr;
-				} else {
-					$distbBegDt = date($date_fmt,strtotime($formattedArr[$count][2]));
+		$commentArr = cmtCreate($value);
+		$recipient = $value[0];                //   The dividens receiver's name
+		
+		if (!empty($recipient)) {
+			$commenceDt = $value[2];               //   Dividend commenct date 
+			//   If a unit holder's investment didn't start at the quarter beginning
+			if (!empty($commenceDt)) {             
+				$begQtr = date($date_fmt,strtotime($commenceDt));
 				}
-				$distbEndDt = $endQtr;
-				$distbPeriod = $distbBegDt." to ".$distbEndDt;     //  Current distribution period
-				
-				$intQtr = $formattedArr[$count][3] * $days;        //  Quarterly Interest
-				//  Create comments
-				$comment_1 = "1. ".$intQtr."/u*".$formattedArr[$count][6]."u=".$formattedArr[$count][7];
-				if (!empty($formattedArr[$count][5])) {
-					$comment_2 = "2. ".$formattedArr[$count][5].$formattedArr[$count][8];
-				} else {$comment_2 = NULL;}
-				
-			}
+			$distbPeriod = $begQtr." to ".$endQtr;  //  Current distribution period
+			
+			$grandTot = $value[9];
+			if (!empty($grandTot)) {
+				$grandTotWords = Numbers_Words::toCurrency($grandTot);
+			
+				//   Create a final array for each unit holder only one row of entry
+				$intemdArr = array($grandTotWords, $grandTot, $recipient, $distbPeriod);
+				${"chqArr".$count}= array_merge($intemdArr, $commentArr);
+				$count++;
+			} else {	
+				//   Create and keep an array for each unit holder with more than one row of entry
+				$intemdArr = array($recipient, $distbPeriod);
+				${"chqArr".$count}= array_merge($intemdArr, $commentArr);
+		 	} 
+		} else {
+			$grandTot = $value[9];
+			if (!empty($grandTot)) {
+				$grandTotWords = Numbers_Words::toCurrency($grandTot);
+			
+				//   Create a final array for each unit holder with more than one row of entry
+				$intemdArr2 = array($grandTotWords, $grandTot);
+				${"chqArr".$count}= array_merge($intemdArr2, ${"chqArr".$count}, $commentArr);
+				$count++;
+			} else {	
+				//   Create and keep an array for each unit holder with more than one row of entry
+				${"chqArr".$count}= array_merge(${"chqArr".$count}, $commentArr);
+		 	} 
 		}
 	}
-	echo "";
-?>
+						
+			 /* 
+			     If an unit holder has more than one row for one's dividend payout 
+			     it will continue the reading to next line until the grand total is found
+				 Otherwise report directly
+			 */ 
+			 
+	print_r($chqArr7);
+?> 
