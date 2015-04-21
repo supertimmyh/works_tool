@@ -1,6 +1,7 @@
 <?php
     //include class
-    include("Numbers/Words.php");
+    require("Numbers/Words.php");
+	require("fpdf17/fpdf.php");
 		
     //phpinfo();
 	
@@ -55,7 +56,7 @@
 				$_divComment = "$".$intQtr."/u*".$_units."u=$".$_divAmt;
 				} else {                          //   Partial period dividends
 					$_divPeriod = daysDiff($_commenceDt, $endQtrDt);
-					$_divComment = "$".$intQtr."/u*".$_units."u divided by " .$days."days *".$_divPeriod." days=$".$_divAmt;
+					$_divComment = "$".$intQtr."/u*".$_units."u divided by " .$days." days *".$_divPeriod." days=$".$_divAmt;
 				}
 			
 			//   Create bonus detail
@@ -106,7 +107,10 @@
 			
 			$grandTot = $value[9];
 			if (!empty($grandTot)) {
+				$grandTot = round($grandTot,2);
+				
 				$grandTotWords = Numbers_Words::toCurrency($grandTot);
+				$grandTotWords = strtoupper ($grandTotWords);
 			
 				//   Create a final array for each unit holder only one row of entry
 				$intemdArr = array($grandTotWords, $grandTot, $recipient, $distbPeriod);
@@ -120,7 +124,10 @@
 		} else {
 			$grandTot = $value[9];
 			if (!empty($grandTot)) {
+				$grandTot = round($grandTot,2);
+				
 				$grandTotWords = Numbers_Words::toCurrency($grandTot);
+				$grandTotWords = strtoupper ($grandTotWords);
 			
 				//   Create a final array for each unit holder with more than one row of entry
 				$intemdArr2 = array($grandTotWords, $grandTot);
@@ -138,6 +145,37 @@
 			     it will continue the reading to next line until the grand total is found
 				 Otherwise report directly
 			 */ 
-			 
-	print_r($chqArr7);
+
+	
+	//   Create the dividend interest total adding and total amount comment
+	for ($i=0; $i<=$count; $i++) {
+		if (!empty(${"chqArr".$i})) {
+			$total = ("$".${"chqArr".$i}[1]);
+			$name = ${"chqArr".$i}[2];
+			$totBreak = (count(${"chqArr".$i}) - 4);
+			if ($totBreak == 1) {
+				$totComments = array(("Total ".$total." paid to ".$name." on ".date($date_fmt)."."));
+			} else {
+				$totCalL = "1";
+				$totCalR = "=".$total;
+				for ($j=2; $j<=$totBreak; $j++) {
+					$totCalL = $totCalL."+".$j;
+				}
+				$totCal = $totCalL.$totCalR;
+				$totComments = array($totCal, ("Total ".$total." paid to ".$name." on ".date($date_fmt)."."));
+			}
+			${"chqArr".$i} = array_merge(${"chqArr".$i}, $totComments);
+		}
+	}
+	
+	//print_r($chqArr8);
+	
+	//   Create PDF file
+	$pdf = new FPDF();
+	$pdf->AddPage();
+	$pdf->SetMargins(2.54, 2.54);
+	$pdf->SetFont('Times','',11);
+	$pdf->Cell(130,4,'');
+	$pdf->Cell(40,4,'Date: Jan 6th, 2015');
+	$pdf->Output('C:\Users\Tim\Documents\Aptana Studio 3 Workspace\works_tool\doc.pdf','F');
 ?> 
