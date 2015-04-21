@@ -39,17 +39,17 @@
 		$dEnd  = new DateTime($endDt);
 		$dDiff = $dStart->diff($dEnd);
 		$numbsDays = $dDiff->format('%a');
-		return $numbsDays;	
+		return ($numbsDays+1);	            //   Count the first day
 	}
 	
 	//   Create a functon for comments
 	function cmtCreate ($arrValue) {
 			global $intQtr, $bounce_pecent, $days, $endQtrDt;
-			$_commenceDt = $arrValue[2];              //   Dividend commenct date             
-			$_units = $arrValue[6];                   //   Total units per unit holder
-			$_divAmt = $arrValue[7];                  //   Dividend amount
-			$_bonus = $arrValue[5];                   //   Bonus indicator
-			$_bonusAmt = $arrValue[8];                //   Bonus amount 
+			$_commenceDt = $arrValue[2];                                       //   Dividend commenct date             
+			$_units = number_format($arrValue[6],0,'',',');                    //   Total units per unit holder
+			$_divAmt = number_format($arrValue[7],2,'.',',');                  //   Dividend amount
+			$_bonus = $arrValue[5];                                            //   Bonus indicator
+			$_bonusAmt = number_format($arrValue[8],2,'.',',');                //   Bonus amount 
 	
 			//   Create divident period and amount detail function
 			if (empty($_commenceDt)) {             //   Full quarter dividends
@@ -90,7 +90,7 @@
 			exit("The first row of data file has blanked receiver's name. Please review the file");
 		}
 	
-	$intQtr = $formattedArr[0][4] * $days;           //  Quarterly Interest
+	$intQtr = round($formattedArr[0][4] * $days,5);           //  Quarterly Interest
 		
 	$count = 0;
 	foreach ($formattedArr as $value) {
@@ -102,6 +102,8 @@
 			//   If a unit holder's investment didn't start at the quarter beginning
 			if (!empty($commenceDt)) {             
 				$begQtr = date($date_fmt,strtotime($commenceDt));
+				} else {
+					$begQtr = date($date_fmt,strtotime($begQtrDt));
 				}
 			$distbPeriod = $begQtr." to ".$endQtr;  //  Current distribution period
 			
@@ -114,6 +116,7 @@
 			
 				//   Create a final array for each unit holder only one row of entry
 				$intemdArr = array($grandTotWords, $grandTot, $recipient, $distbPeriod);
+				//   Finalize the array for the unit holder
 				${"chqArr".$count}= array_merge($intemdArr, $commentArr);
 				$count++;
 			} else {	
@@ -132,6 +135,7 @@
 				//   Create a final array for each unit holder with more than one row of entry
 				$intemdArr2 = array($grandTotWords, $grandTot);
 				${"chqArr".$count}= array_merge($intemdArr2, ${"chqArr".$count}, $commentArr);
+				//   Finalize the array for the unit holder
 				$count++;
 			} else {	
 				//   Create and keep an array for each unit holder with more than one row of entry
@@ -139,43 +143,72 @@
 		 	} 
 		}
 	}
-						
+					
 			 /* 
 			     If an unit holder has more than one row for one's dividend payout 
 			     it will continue the reading to next line until the grand total is found
 				 Otherwise report directly
 			 */ 
 
-	
+
 	//   Create the dividend interest total adding and total amount comment
-	for ($i=0; $i<=$count; $i++) {
+	for ($i=0; $i<$count; $i++) {
 		if (!empty(${"chqArr".$i})) {
+			${"chqArr".$i}[1] = number_format(${"chqArr".$i}[1],2,'.',',');
 			$total = ("$".${"chqArr".$i}[1]);
 			$name = ${"chqArr".$i}[2];
 			$totBreak = (count(${"chqArr".$i}) - 4);
 			if ($totBreak == 1) {
-				$totComments = array(("Total ".$total." paid to ".$name." on ".date($date_fmt)."."));
+				$totComments = array(("Total ".$total." paid to ".$name." on ".date($date_fmt)."."), ($totBreak+2));
 			} else {
-				$totCalL = "1";
 				$totCalR = "=".$total;
-				for ($j=2; $j<=$totBreak; $j++) {
-					$totCalL = $totCalL."+".$j;
+				for ($j=1; $j<=$totBreak; $j++) {
+					${"chqArr".$i}[$j-1+4] = $j.". ".${"chqArr".$i}[$j-1+4];
+					if ($j==1) {
+						$totCalL = "1";
+					} else {
+						$totCalL = $totCalL."+".$j;
+					}
 				}
 				$totCal = $totCalL.$totCalR;
-				$totComments = array($totCal, ("Total ".$total." paid to ".$name." on ".date($date_fmt)."."));
+				$totComments = array($totCal, ("Total ".$total." paid to ".$name." on ".date($date_fmt)."."), ($totBreak+3));
 			}
 			${"chqArr".$i} = array_merge(${"chqArr".$i}, $totComments);
+		} else {                                                          //   If there is undefined row in file, error out
+			exit("The file has a row with empty or zero data. Please review");
 		}
 	}
 	
-	//print_r($chqArr8);
+	//print_r($chqArr3);
+	//exit;
 	
 	//   Create PDF file
 	$pdf = new FPDF();
-	$pdf->AddPage();
-	$pdf->SetMargins(2.54, 2.54);
-	$pdf->SetFont('Times','',11);
-	$pdf->Cell(130,4,'');
-	$pdf->Cell(40,4,'Date: Jan 6th, 2015');
-	$pdf->Output('C:\Users\Tim\Documents\Aptana Studio 3 Workspace\works_tool\doc.pdf','F');
+	$pdf->SetTopMargin(25);
+	$pdf->SetLeftMargin(18);
+	for ($m=0; $m<$count; $m++) {
+		$chqArr = ${"chqArr".$m};
+		$pdf->AddPage(); 
+		$pdf->SetFont('Times','B',12);
+		$pdf->Cell(137,4,'');
+		$pdf->Cell(38,4,$chq_print_dt,0,0,'R');
+		$pdf->Ln(10);
+		$pdf->SetFont('Times','',9);
+		$pdf->Cell(147,4,$chqArr[0]);
+		$pdf->SetFont('Times','B',12);
+		$pdf->Cell(29,4,$chqArr[1],0,0,'R');
+		$pdf->Ln(19);
+		$pdf->Cell(60,4,$chqArr[2]);
+		for ($k=0; $k<2; $k++) {
+			if ($k==0) {
+				$pdf->Ln(55);
+			} else {
+				$pdf->Ln(85);
+			}
+			for ($l=1; $l<=end($chqArr); $l++) {
+				$pdf->Cell(130,4,$chqArr[2+$l],0,1);
+			}
+		}
+	}
+	$pdf->Output('C:\Users\Tim\Documents\Aptana Studio 3 Workspace\works_tool\cheques.pdf','F');
 ?> 
